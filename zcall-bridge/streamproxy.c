@@ -16,32 +16,46 @@
  * and starts the bridge (popping the compositor's permission dialog), so
  * the user never has to prepare the bridge manually.
  *
+ * Frames are read from the bridge display through MIT-SHM (one shared
+ * segment, reused while the grab size stays the same), so a 1080p grab no
+ * longer streams 8MB through the X socket every frame. Displays without
+ * MIT-SHM (or where attaching fails) fall back to plain XGetImage.
+ *
  * Build (32-bit — ZaloCall is 32-bit, a 64-bit shim never intercepts):
- *   gcc -m32 -shared -fPIC -O2 streamproxy.c -ldl -lX11 -lxcb -o streamproxy.so
- * Debug: set ZCALL_PROXY_LOG=<file> to trace which API the app uses.
+ *   gcc -m32 -shared -fPIC -O2 streamproxy.c -ldl -lpthread -lX11 -lXext -lxcb -o streamproxy.so
+ * Debug: set ZCALL_PROXY_LOG=<file> to log connection changes and a
+ * grab-rate line (fps, ms per grab) every few seconds while sharing.
  */
 #define _GNU_SOURCE
 #include <dlfcn.h>
+#include <pthread.h>
 #include <stdarg.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/ipc.h>
+#include <sys/shm.h>
+#include <time.h>
 #include <X11/Xlib.h>
 #include <X11/Xutil.h>
 #include <X11/extensions/XShm.h>
 #include <xcb/xcb.h>
 #include <xcb/xproto.h>
 
+/* Logging is opt-in and must stay off the per-frame path: the plugin always
+ * sets ZCALL_PROXY_LOG, and an fprintf+fflush per grab cost as much as the
+ * grab itself. Per-frame events are summarised by grab_stats() instead. */
 static FILE *logf = NULL;
+static int log_state = -1; /* -1 unchecked, 0 off, 1 on */
 
 static void plog(const char *fmt, ...) {
-    if (!logf) {
+    if (log_state < 0) {
         const char *p = getenv("ZCALL_PROXY_LOG");
-        if (!p) return;
-        logf = fopen(p, "a");
-        if (!logf) return;
+        logf = p ? fopen(p, "a") : NULL;
+        log_state = logf != NULL;
     }
+    if (!log_state) return;
     va_list ap;
     va_start(ap, fmt);
     vfprintf(logf, fmt, ap);
@@ -49,13 +63,69 @@ static void plog(const char *fmt, ...) {
     fflush(logf);
 }
 
+static double mono_now(void) {
+    struct timespec t;
+    clock_gettime(CLOCK_MONOTONIC, &t);
+    return t.tv_sec + t.tv_nsec / 1e9;
+}
+
+/* Grab-rate summary every STATS_PERIOD seconds, so the log shows the real
+ * share frame rate without a line per frame. */
+#define STATS_PERIOD 5.0
+static double stats_start = 0;
+static unsigned stats_grabs = 0;
+static double stats_busy = 0;
+
+static void grab_stats(double t0, const char *api, unsigned w, unsigned h,
+                       int shm) {
+    double t1 = mono_now();
+    if (stats_grabs == 0 && stats_start == 0) {
+        plog("streamproxy: first %s root grab %ux%u proxied (%s)\n", api, w,
+             h, shm ? "shm" : "XGetImage");
+        stats_start = t0;
+    }
+    stats_grabs++;
+    stats_busy += t1 - t0;
+    if (t1 - stats_start >= STATS_PERIOD) {
+        plog("streamproxy: %.1f fps, %.2f ms/grab, %ux%u via %s\n",
+             stats_grabs / (t1 - stats_start), stats_busy * 1000 / stats_grabs,
+             w, h, shm ? "shm" : "XGetImage");
+        stats_start = t1;
+        stats_grabs = 0;
+        stats_busy = 0;
+    }
+}
+
 /* ------------------------------------------------------------------ */
-/* lazy connections to the bridge display                              */
+/* lazy connection to the bridge display                               */
 /* ------------------------------------------------------------------ */
 
+/* Capture calls can come from several wine threads; every use of the
+ * bridge connection and the shared segment goes through this lock. */
+static pthread_mutex_t src_lock = PTHREAD_MUTEX_INITIALIZER;
+
 static Display *src_dpy = NULL;
-static xcb_connection_t *src_c = NULL;
-static xcb_window_t src_root = 0;
+
+/* A failed connect is not retried for RECONNECT_DELAY seconds: without
+ * this, every grab while the bridge is down (and every grab on X11
+ * sessions, where there is no bridge) paid for a fresh connect attempt. */
+#define RECONNECT_DELAY 1.0
+static double next_connect = 0;
+
+typedef XImage *(*XGetImage_fn)(Display *, Drawable, int, int, unsigned int,
+                                unsigned int, unsigned long, int);
+typedef Bool (*XShmGetImage_fn)(Display *, Drawable, XImage *, int, int,
+                                unsigned long);
+
+static XGetImage_fn real_XGetImage = NULL;
+static XShmGetImage_fn real_XShmGetImage = NULL;
+
+static void resolve_real(void) {
+    if (!real_XGetImage)
+        real_XGetImage = (XGetImage_fn)dlsym(RTLD_NEXT, "XGetImage");
+    if (!real_XShmGetImage)
+        real_XShmGetImage = (XShmGetImage_fn)dlsym(RTLD_NEXT, "XShmGetImage");
+}
 
 /* The app starts capturing (user clicked "share screen"): if the bridge
  * display is not up, ask the plugin to start the bridge by touching the
@@ -68,16 +138,31 @@ static void signal_request(void) {
     if (f) fclose(f);
 }
 
+/* MIT-SHM segment the bridge display writes grabs into. */
+static XImage *shm_img = NULL;
+static XShmSegmentInfo shm_info;
+static int shm_usable = 1; /* cleared once MIT-SHM is missing or fails */
+static int shm_attach_failed = 0;
+
+static void shm_release(void) {
+    if (!shm_img) return;
+    if (src_dpy) XShmDetach(src_dpy, &shm_info);
+    XDestroyImage(shm_img); /* frees the XImage only, not the segment */
+    shmdt(shm_info.shmaddr);
+    shm_img = NULL;
+}
+
 /* If the bridge display dies mid-capture, Xlib's default IO error handler
  * would kill the whole app. Instead drop the cached connection (next grab
  * re-opens or falls through) and chain anything else to the original
- * handler. */
+ * handler. Runs inside an Xlib call made under src_lock, so no locking. */
 static int (*orig_io_handler)(Display *) = NULL;
 
 static int src_io_handler(Display *d) {
     if (d == src_dpy) {
         plog("streamproxy: src connection broken, dropping cache\n");
         src_dpy = NULL;
+        shm_release();
         return 0;
     }
     if (orig_io_handler) return orig_io_handler(d);
@@ -110,67 +195,120 @@ static void keep_alive_on_src_loss(Display *d) {
     if (set_exit) set_exit(d, src_io_exit_handler, NULL);
 }
 
+/* Caller holds src_lock. */
 static Display *ensure_src_dpy(void) {
-    if (!src_dpy) {
-        const char *n = getenv("ZCALL_PROXY_SRC");
-        if (!n) n = ":99";
-        src_dpy = XOpenDisplay(n);
-        if (src_dpy) {
-            keep_alive_on_src_loss(src_dpy);
-            /* Once only: a reopen after a lost bridge must not chain the
-             * handler to itself. */
-            static int io_handler_set = 0;
-            if (!io_handler_set) {
-                orig_io_handler = XSetIOErrorHandler(src_io_handler);
-                io_handler_set = 1;
-            }
-            plog("streamproxy: libX11 src %s opened\n", n);
-        } else {
-            plog("streamproxy: cannot open src %s (not proxying)\n", n);
-            signal_request();
+    if (src_dpy) return src_dpy;
+    double now = mono_now();
+    if (now < next_connect) return NULL;
+    const char *n = getenv("ZCALL_PROXY_SRC");
+    if (!n) n = ":99";
+    src_dpy = XOpenDisplay(n);
+    if (src_dpy) {
+        keep_alive_on_src_loss(src_dpy);
+        /* Once only: a reopen after a lost bridge must not chain the
+         * handler to itself. */
+        static int io_handler_set = 0;
+        if (!io_handler_set) {
+            orig_io_handler = XSetIOErrorHandler(src_io_handler);
+            io_handler_set = 1;
         }
+        stats_start = 0;
+        stats_grabs = 0;
+        stats_busy = 0;
+        plog("streamproxy: src %s opened\n", n);
+    } else {
+        next_connect = now + RECONNECT_DELAY;
+        plog("streamproxy: cannot open src %s (not proxying)\n", n);
+        signal_request();
     }
     return src_dpy;
 }
 
-static xcb_connection_t *ensure_src_c(void) {
-    /* The bridge display went away: drop the dead connection and retry. */
-    if (src_c && xcb_connection_has_error(src_c)) {
-        plog("streamproxy: xcb src connection broken, dropping cache\n");
-        xcb_disconnect(src_c);
-        src_c = NULL;
+static int shm_error_handler(Display *d, XErrorEvent *e) {
+    (void)d;
+    (void)e;
+    shm_attach_failed = 1;
+    return 0;
+}
+
+/* (Re)create the shared segment for a w x h grab. Caller holds src_lock. */
+static int shm_setup(Display *d, unsigned int w, unsigned int h) {
+    shm_release();
+    if (!XShmQueryExtension(d)) {
+        plog("streamproxy: src has no MIT-SHM, using XGetImage\n");
+        shm_usable = 0;
+        return 0;
     }
-    if (!src_c) {
-        const char *n = getenv("ZCALL_PROXY_SRC");
-        if (!n) n = ":99";
-        int scr = 0;
-        src_c = xcb_connect(n, &scr);
-        if (src_c && !xcb_connection_has_error(src_c)) {
-            xcb_screen_iterator_t it =
-                xcb_setup_roots_iterator(xcb_get_setup(src_c));
-            if (it.rem) src_root = it.data->root;
-            plog("streamproxy: xcb src %s opened\n", n);
-        } else {
-            if (src_c) xcb_disconnect(src_c);
-            src_c = NULL;
-            plog("streamproxy: cannot open xcb src %s\n", n);
-            signal_request();
+    int scr = DefaultScreen(d);
+    XImage *im = XShmCreateImage(d, DefaultVisual(d, scr), DefaultDepth(d, scr),
+                                 ZPixmap, NULL, &shm_info, w, h);
+    if (!im) goto fail;
+    shm_info.shmid = shmget(IPC_PRIVATE, (size_t)im->bytes_per_line * im->height,
+                            IPC_CREAT | 0600);
+    if (shm_info.shmid < 0) {
+        XDestroyImage(im);
+        goto fail;
+    }
+    shm_info.shmaddr = im->data = shmat(shm_info.shmid, NULL, 0);
+    shmctl(shm_info.shmid, IPC_RMID, NULL); /* freed once both sides detach */
+    if (shm_info.shmaddr == (char *)-1) {
+        XDestroyImage(im);
+        goto fail;
+    }
+    shm_info.readOnly = False;
+    /* XShmAttach fails asynchronously (e.g. the X server sits in another
+     * IPC namespace); catch it here instead of in the app's handler. */
+    shm_attach_failed = 0;
+    XErrorHandler prev = XSetErrorHandler(shm_error_handler);
+    XShmAttach(d, &shm_info);
+    XSync(d, False);
+    XSetErrorHandler(prev);
+    if (shm_attach_failed) {
+        XDestroyImage(im);
+        shmdt(shm_info.shmaddr);
+        goto fail;
+    }
+    shm_img = im;
+    return 1;
+fail:
+    plog("streamproxy: MIT-SHM setup failed, using XGetImage\n");
+    shm_usable = 0;
+    return 0;
+}
+
+/* Grab a root region of the bridge display. Returns the shared image
+ * (*owned = 0, valid until the next grab) or a fresh XGetImage result the
+ * caller must XDestroyImage (*owned = 1). Caller holds src_lock. */
+static XImage *src_grab(int x, int y, unsigned int w, unsigned int h,
+                        unsigned long plane_mask, int format, int *owned) {
+    Display *d = src_dpy;
+    Window root = DefaultRootWindow(d);
+    int scr = DefaultScreen(d);
+    /* Out-of-bounds grabs raise BadMatch; let the app's own call fail
+     * instead of the app's error handler seeing an error on our display. */
+    if (x < 0 || y < 0 || w == 0 || h == 0 ||
+        (unsigned int)x + w > (unsigned int)DisplayWidth(d, scr) ||
+        (unsigned int)y + h > (unsigned int)DisplayHeight(d, scr))
+        return NULL;
+    unsigned long all = (1UL << DefaultDepth(d, scr)) - 1;
+    if (shm_usable && format == ZPixmap && (plane_mask & all) == all) {
+        if ((shm_img && (unsigned int)shm_img->width == w &&
+             (unsigned int)shm_img->height == h) ||
+            shm_setup(d, w, h)) {
+            if (real_XShmGetImage(d, root, shm_img, x, y, AllPlanes)) {
+                *owned = 0;
+                return shm_img;
+            }
+            if (!src_dpy) return NULL; /* connection died during the grab */
         }
     }
-    return src_c;
+    *owned = 1;
+    return real_XGetImage(d, root, x, y, w, h, plane_mask, format);
 }
 
 /* ------------------------------------------------------------------ */
 /* libX11: XGetImage / XShmGetImage                                    */
 /* ------------------------------------------------------------------ */
-
-typedef XImage *(*XGetImage_fn)(Display *, Drawable, int, int, unsigned int,
-                                unsigned int, unsigned long, int);
-typedef Bool (*XShmGetImage_fn)(Display *, Drawable, XImage *, int, int,
-                                unsigned long);
-
-static XGetImage_fn real_XGetImage = NULL;
-static XShmGetImage_fn real_XShmGetImage = NULL;
 
 static int is_root(Display *dpy, Drawable d) {
     return d == (Drawable)DefaultRootWindow(dpy);
@@ -178,41 +316,66 @@ static int is_root(Display *dpy, Drawable d) {
 
 XImage *XGetImage(Display *dpy, Drawable d, int x, int y, unsigned int w,
                   unsigned int h, unsigned long plane_mask, int format) {
-    if (!real_XGetImage)
-        real_XGetImage = (XGetImage_fn)dlsym(RTLD_NEXT, "XGetImage");
-    if (ensure_src_dpy() && dpy != src_dpy && is_root(dpy, d)) {
-        XImage *im = real_XGetImage(src_dpy, (Drawable)DefaultRootWindow(src_dpy),
-                                    x, y, w, h, plane_mask, format);
-        plog("streamproxy: XGetImage root %ux%u+%d+%d -> %s\n", w, h, x, y,
-             im ? "proxied" : "src-failed, fell through");
-        if (im) return im;
+    resolve_real();
+    if (is_root(dpy, d)) {
+        XImage *out = NULL;
+        pthread_mutex_lock(&src_lock);
+        if (ensure_src_dpy() && dpy != src_dpy) {
+            double t0 = mono_now();
+            int owned = 1;
+            XImage *im = src_grab(x, y, w, h, plane_mask, format, &owned);
+            if (im && owned) {
+                out = im;
+            } else if (im) {
+                /* hand the app its own copy: it will XDestroyImage it */
+                size_t len = (size_t)im->bytes_per_line * im->height;
+                char *buf = malloc(len);
+                if (buf) {
+                    memcpy(buf, im->data, len);
+                    out = XCreateImage(src_dpy, DefaultVisual(src_dpy, DefaultScreen(src_dpy)),
+                                       im->depth, ZPixmap, 0, buf, w, h,
+                                       im->bitmap_pad, im->bytes_per_line);
+                    if (!out) free(buf);
+                }
+            }
+            if (out) grab_stats(t0, "XGetImage", w, h, !owned);
+        }
+        pthread_mutex_unlock(&src_lock);
+        if (out) return out;
     }
     return real_XGetImage(dpy, d, x, y, w, h, plane_mask, format);
 }
 
 Bool XShmGetImage(Display *dpy, Drawable d, XImage *image, int x, int y,
                   unsigned long plane_mask) {
-    if (!real_XShmGetImage)
-        real_XShmGetImage = (XShmGetImage_fn)dlsym(RTLD_NEXT, "XShmGetImage");
-    if (ensure_src_dpy() && dpy != src_dpy && is_root(dpy, d) && image) {
-        XImage *im = real_XGetImage(src_dpy, (Drawable)DefaultRootWindow(src_dpy),
-                                    x, y, image->width, image->height,
-                                    plane_mask, ZPixmap);
-        if (im) {
-            size_t copy = im->bytes_per_line < image->bytes_per_line
-                              ? (size_t)im->bytes_per_line
-                              : (size_t)image->bytes_per_line;
-            unsigned int rows = (unsigned int)im->height < (unsigned int)image->height
-                                    ? (unsigned int)im->height
-                                    : (unsigned int)image->height;
-            for (unsigned int r = 0; r < rows; r++)
-                memcpy(image->data + (size_t)r * image->bytes_per_line,
-                       im->data + (size_t)r * im->bytes_per_line, copy);
-            XDestroyImage(im);
-            plog("streamproxy: XShmGetImage root %dx%d -> proxied\n",
-                 image->width, image->height);
-            return True;
+    resolve_real();
+    if (image && is_root(dpy, d)) {
+        int done = 0;
+        pthread_mutex_lock(&src_lock);
+        if (ensure_src_dpy() && dpy != src_dpy) {
+            double t0 = mono_now();
+            int owned = 1;
+            XImage *im = src_grab(x, y, image->width, image->height,
+                                  plane_mask, ZPixmap, &owned);
+            if (im) {
+                size_t copy = im->bytes_per_line < image->bytes_per_line
+                                  ? (size_t)im->bytes_per_line
+                                  : (size_t)image->bytes_per_line;
+                if (im->bytes_per_line == image->bytes_per_line)
+                    memcpy(image->data, im->data,
+                           copy * (size_t)image->height);
+                else
+                    for (int r = 0; r < image->height; r++)
+                        memcpy(image->data + (size_t)r * image->bytes_per_line,
+                               im->data + (size_t)r * im->bytes_per_line, copy);
+                if (owned) XDestroyImage(im);
+                grab_stats(t0, "XShmGetImage", image->width, image->height,
+                           !owned);
+                done = 1;
+            }
         }
+        pthread_mutex_unlock(&src_lock);
+        if (done) return True;
     }
     return real_XShmGetImage(dpy, d, image, x, y, plane_mask);
 }
@@ -250,25 +413,35 @@ xcb_get_image_cookie_t xcb_get_image(xcb_connection_t *c, uint8_t format,
                                      uint32_t plane_mask) {
     if (!real_xcb_get_image)
         real_xcb_get_image = (xcb_get_image_fn)dlsym(RTLD_NEXT, "xcb_get_image");
+    int proxy = 0;
+    if (format == XCB_IMAGE_FORMAT_Z_PIXMAP && drawable == conn_root(c)) {
+        pthread_mutex_lock(&src_lock);
+        proxy = ensure_src_dpy() != NULL;
+        pthread_mutex_unlock(&src_lock);
+    }
+    if (!proxy)
+        return real_xcb_get_image(c, format, drawable, x, y, width, height,
+                                  plane_mask);
+    /* The real reply is thrown away (BadMatch on rootless XWayland), so
+     * only ask for one pixel of it: the request still has to go out to
+     * give the app a valid cookie. */
     xcb_get_image_cookie_t cookie =
-        real_xcb_get_image(c, format, drawable, x, y, width, height, plane_mask);
-    if (ensure_src_c() && c != src_c && drawable == conn_root(c)) {
-        unsigned int slot = cookie.sequence % PROXY_MAP_SIZE;
-        for (unsigned int i = 0; i < PROXY_MAP_SIZE; i++) {
-            unsigned int s = (slot + i) % PROXY_MAP_SIZE;
-            if (!proxy_map[s].valid) {
-                proxy_map[s].valid = 1;
-                proxy_map[s].seq = cookie.sequence;
-                proxy_map[s].x = x;
-                proxy_map[s].y = y;
-                proxy_map[s].w = width;
-                proxy_map[s].h = height;
-                plog("streamproxy: xcb_get_image root %ux%u+%d+%d queued\n",
-                     width, height, x, y);
-                break;
-            }
+        real_xcb_get_image(c, format, drawable, 0, 0, 1, 1, plane_mask);
+    pthread_mutex_lock(&src_lock);
+    unsigned int slot = cookie.sequence % PROXY_MAP_SIZE;
+    for (unsigned int i = 0; i < PROXY_MAP_SIZE; i++) {
+        unsigned int s = (slot + i) % PROXY_MAP_SIZE;
+        if (!proxy_map[s].valid) {
+            proxy_map[s].valid = 1;
+            proxy_map[s].seq = cookie.sequence;
+            proxy_map[s].x = x;
+            proxy_map[s].y = y;
+            proxy_map[s].w = width;
+            proxy_map[s].h = height;
+            break;
         }
     }
+    pthread_mutex_unlock(&src_lock);
     return cookie;
 }
 
@@ -278,41 +451,57 @@ xcb_get_image_reply_t *xcb_get_image_reply(xcb_connection_t *c,
     if (!real_xcb_get_image_reply)
         real_xcb_get_image_reply =
             (xcb_get_image_reply_fn)dlsym(RTLD_NEXT, "xcb_get_image_reply");
+    resolve_real();
+    int found = 0;
+    int16_t x = 0, y = 0;
+    uint16_t w = 0, h = 0;
+    pthread_mutex_lock(&src_lock);
     unsigned int slot = cookie.sequence % PROXY_MAP_SIZE;
     for (unsigned int i = 0; i < PROXY_MAP_SIZE; i++) {
         unsigned int s = (slot + i) % PROXY_MAP_SIZE;
         if (proxy_map[s].valid && proxy_map[s].seq == cookie.sequence) {
             proxy_map[s].valid = 0;
-            /* swallow the real reply (BadMatch on rootless XWayland) */
-            xcb_generic_error_t *lerr = NULL;
-            xcb_get_image_reply_t *rr = real_xcb_get_image_reply(c, cookie, &lerr);
-            free(rr);
-            /* fetch the same region from the bridge display */
-            xcb_get_image_cookie_t c2 =
-                real_xcb_get_image(src_c, XCB_IMAGE_FORMAT_Z_PIXMAP, src_root,
-                                   proxy_map[s].x, proxy_map[s].y,
-                                   proxy_map[s].w, proxy_map[s].h, ~0);
-            xcb_get_image_reply_t *r2 = real_xcb_get_image_reply(src_c, c2, NULL);
-            if (r2) {
-                uint8_t *data = (uint8_t *)(r2 + 1);
-                size_t len = (size_t)r2->length * 4;
-                xcb_get_image_reply_t *out =
-                    malloc(sizeof(xcb_get_image_reply_t) + len);
-                memset(out, 0, sizeof(xcb_get_image_reply_t));
-                out->response_type = 1;
-                out->depth = r2->depth;
-                out->sequence = (uint16_t)cookie.sequence;
-                out->visual = r2->visual;
-                out->length = r2->length;
-                memcpy(out + 1, data, len);
-                free(r2);
-                plog("streamproxy: xcb root grab %ux%u -> proxied\n",
-                     proxy_map[s].w, proxy_map[s].h);
-                return out;
-            }
-            plog("streamproxy: xcb src grab failed\n");
-            return NULL;
+            x = proxy_map[s].x;
+            y = proxy_map[s].y;
+            w = proxy_map[s].w;
+            h = proxy_map[s].h;
+            found = 1;
+            break;
         }
     }
-    return real_xcb_get_image_reply(c, cookie, e);
+    pthread_mutex_unlock(&src_lock);
+    if (!found) return real_xcb_get_image_reply(c, cookie, e);
+
+    /* swallow the real (1x1 / BadMatch) reply */
+    xcb_generic_error_t *lerr = NULL;
+    free(real_xcb_get_image_reply(c, cookie, &lerr));
+    free(lerr);
+
+    xcb_get_image_reply_t *out = NULL;
+    pthread_mutex_lock(&src_lock);
+    if (ensure_src_dpy()) {
+        double t0 = mono_now();
+        int owned = 1;
+        XImage *im = src_grab(x, y, w, h, AllPlanes, ZPixmap, &owned);
+        if (im) {
+            size_t len = (size_t)im->bytes_per_line * im->height;
+            out = malloc(sizeof(xcb_get_image_reply_t) + len);
+            if (out) {
+                memset(out, 0, sizeof(xcb_get_image_reply_t));
+                out->response_type = 1;
+                out->depth = im->depth;
+                out->sequence = (uint16_t)cookie.sequence;
+                out->visual = XVisualIDFromVisual(
+                    DefaultVisual(src_dpy, DefaultScreen(src_dpy)));
+                out->length = (uint32_t)(len / 4);
+                memcpy(out + 1, im->data, len);
+                grab_stats(t0, "xcb_get_image", w, h, !owned);
+            }
+            if (owned) XDestroyImage(im);
+        }
+    }
+    pthread_mutex_unlock(&src_lock);
+    if (!out) plog("streamproxy: xcb src grab failed\n");
+    if (!out && e) *e = NULL;
+    return out;
 }
