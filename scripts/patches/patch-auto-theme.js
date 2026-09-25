@@ -112,12 +112,22 @@ const THEME_MAIN_INJECTION = `
 // Every version of the main.js injection above (closing `})();` at column 0).
 const THEME_MAIN_BLOCK_RE = /\/\/ --- Zalo Linux Auto Dark\/Light Theme Sync ---\n\(function\(\)\{[\s\S]*?\n\}\)\(\);\n?/;
 
+// Every version of the preload injection below (`(function() {` with a space,
+// unlike the main.js block; closing `})();` at column 0).
+const THEME_PRELOAD_BLOCK_RE = /\/\/ --- Zalo Linux Auto Dark\/Light Theme Sync ---\n\(function\(\) \{[\s\S]*?\n\}\)\(\);\n?/;
+
 const THEME_PRELOAD_INJECTION = `
 // --- Zalo Linux Auto Dark/Light Theme Sync ---
 (function() {
   if (process.platform !== "linux") return;
   const { ipcRenderer } = require("electron");
 
+  // The title-bar switch (main process, zalo-linux-theme.json) is the only
+  // source of truth. Zalo's own setting is kept on SYSTEM (2), which follows
+  // nativeTheme, i.e. the switch. A pinned Zalo setting (0 light / 1 dark)
+  // made Zalo render its own theme on the next launch while the switch showed
+  // the other one.
+  const readConf = () => { try { return JSON.parse(localStorage.getItem("za_theme") || "{}") || {}; } catch (_) { return {}; } };
   function applyTheme(isDark) {
     if (isDark) {
       document.documentElement.classList.add("dark");
@@ -127,10 +137,10 @@ const THEME_PRELOAD_INJECTION = `
       if (document.body) document.body.classList.remove("dark");
     }
     try {
-      const confStr = localStorage.getItem("za_theme");
-      let conf = confStr ? JSON.parse(confStr) : {};
-      if (conf.theme_setting === 2 || !conf.theme) {
-        conf.theme = isDark ? "dark" : "light";
+      const conf = readConf();
+      const theme = isDark ? "dark" : "light";
+      if (conf.theme !== theme || conf.theme_setting !== 2) {
+        conf.theme = theme;
         conf.theme_setting = 2;
         localStorage.setItem("za_theme", JSON.stringify(conf));
       }
@@ -140,6 +150,21 @@ const THEME_PRELOAD_INJECTION = `
   ipcRenderer.on("zalo-linux-theme-change", (e, mode) => {
     applyTheme(mode === "dark");
   });
+
+  // Light/Dark picked in Zalo's own settings: adopt it as the switch mode
+  // (persisted by the main process), which puts Zalo back on SYSTEM.
+  try {
+    const adopt = new MutationObserver(() => {
+      const conf = readConf();
+      if (conf.theme_setting === 0 || conf.theme_setting === 1) {
+        ipcRenderer.invoke("zalo-linux-set-theme-mode", conf.theme_setting === 1 ? "dark" : "light").catch(() => {});
+      }
+    });
+    const watch = (el) => adopt.observe(el, { attributes: true, attributeFilter: ["class"] });
+    watch(document.documentElement);
+    if (document.body) watch(document.body);
+    else document.addEventListener("DOMContentLoaded", () => watch(document.body));
+  } catch (_) {}
 
   try {
     const mq = window.matchMedia("(prefers-color-scheme: dark)");
@@ -183,7 +208,14 @@ async function main() {
   const preloadJsPath = path.join(mainDistDir, 'preload-render.js');
   if (fs.existsSync(preloadJsPath)) {
     let content = fs.readFileSync(preloadJsPath, 'utf8');
-    if (!content.includes('zalo-linux-theme-change')) {
+    const block = THEME_PRELOAD_INJECTION.replace(/^\n/, '');
+    if (THEME_PRELOAD_BLOCK_RE.test(content)) {
+      const updated = content.replace(THEME_PRELOAD_BLOCK_RE, () => block);
+      if (updated !== content) {
+        fs.writeFileSync(preloadJsPath, updated, 'utf8');
+        logger.dim('Updated auto theme sync in preload-render.js');
+      }
+    } else if (!content.includes('zalo-linux-theme-change')) {
       content = content.trimEnd() + '\n' + THEME_PRELOAD_INJECTION + '\n';
       fs.writeFileSync(preloadJsPath, content, 'utf8');
       logger.dim('Injected auto theme sync into preload-render.js');

@@ -973,19 +973,26 @@ async function main() {
       let content = fs.readFileSync(htmlPath, 'utf8');
       let changed = false;
 
-      // Disable body.style.background assignment
+      // Disable body.style.background assignment. It is the body of an
+      // `if (theme === "dark")`, so it must become an empty block: a bare
+      // comment left `if (...) }` behind, a SyntaxError that killed the script.
       if (content.includes('document.body.style.background = bgColorDark;')) {
         content = content.replace(
           'document.body.style.background = bgColorDark;',
-          '/* transparent body */'
+          '{ /* transparent body */ }'
         );
         changed = true;
       }
       if (content.includes('document.body.style.background = bgColorDark')) {
         content = content.replace(
           'document.body.style.background = bgColorDark',
-          '/* transparent body */'
+          '{ /* transparent body */ }'
         );
+        changed = true;
+      }
+      // Repair output of the earlier version of this patch
+      if (content.includes(') /* transparent body */')) {
+        content = content.split(') /* transparent body */').join(') { /* transparent body */ }');
         changed = true;
       }
 
