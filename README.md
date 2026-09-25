@@ -26,14 +26,15 @@
 > lại để chạy trên Linux.
 
 <div align="center">
-  <img src="docs/screenshots/main-window-dark.png" width="820" alt="Cửa sổ chính Zalo for Linux trên GNOME (giao diện tối)" />
+  <img src="docs/screenshots/tour.gif" width="820" alt="Giới thiệu nhanh Zalo for Linux: giao diện sáng/tối, nhiều cửa sổ chat, gọi video và chia sẻ màn hình" />
   <br/>
-  <sub>Cửa sổ chính trên GNOME / Wayland, giao diện tối. Danh sách hội thoại đã được làm mờ.</sub>
+  <sub>Chạy trên Debian 13 · GNOME Wayland. Ảnh đại diện đã được làm mờ.</sub>
 </div>
 
 ## 📑 Mục lục
 
 - [Giới thiệu](#-giới-thiệu)
+- [Ảnh chụp giao diện](#%EF%B8%8F-ảnh-chụp-giao-diện)
 - [Tính năng](#-tính-năng)
 - [Cài đặt](#-cài-đặt)
 - [Gọi điện, video và chia sẻ màn hình](#-gọi-điện-video-và-chia-sẻ-màn-hình)
@@ -61,6 +62,61 @@ hình màn hình thật vào cuộc gọi để chia sẻ màn hình hoạt đ�
 Cảm ơn **[@realdtn2](https://github.com/realdtn2)** với giải pháp gốc
 [realdtn2/zalo-linux-2026](https://github.com/realdtn2/zalo-linux-2026).
 
+## 🖼️ Ảnh chụp giao diện
+
+> Tất cả ảnh chụp từ bản AppImage thật trên Debian 13 (GNOME, Wayland), cùng khung 1600×1000.
+
+### Giao diện sáng / tối — một nút gạt trên thanh tiêu đề
+
+<div align="center">
+  <img src="docs/screenshots/theme-switch.gif" width="820" alt="Chuyển giao diện sáng và tối bằng nút gạt trên thanh tiêu đề" />
+</div>
+
+<table>
+  <tr>
+    <td width="50%"><img src="docs/screenshots/01-main-light.png" alt="Cửa sổ chính, giao diện sáng" /></td>
+    <td width="50%"><img src="docs/screenshots/02-main-dark.png" alt="Cửa sổ chính, giao diện tối" /></td>
+  </tr>
+  <tr>
+    <td align="center"><b>Giao diện sáng</b><br/><sub>Thanh tiêu đề riêng, bo góc, nút gạt ☀️/🌙 và nút đóng</sub></td>
+    <td align="center"><b>Giao diện tối</b><br/><sub>Bấm nút gạt để đổi · chuột phải để theo lại hệ thống</sub></td>
+  </tr>
+</table>
+
+### Nhiều cửa sổ chat
+
+<table>
+  <tr>
+    <td width="50%"><img src="docs/screenshots/03-chat-window.png" alt="Cuộc trò chuyện mở trong cửa sổ riêng" /></td>
+    <td width="50%"><img src="docs/screenshots/04-multi-window.png" alt="Nhiều cửa sổ chat cùng lúc trên desktop" /></td>
+  </tr>
+  <tr>
+    <td align="center"><b>Mở cửa sổ riêng</b><br/><sub>Mỗi cuộc trò chuyện một cửa sổ, có nút đóng và kéo thả</sub></td>
+    <td align="center"><b>Nhiều cửa sổ cùng lúc</b><br/><sub>Cửa sổ chính vẫn mượt, không bị treo</sub></td>
+  </tr>
+</table>
+
+### Gọi video và chia sẻ màn hình
+
+<table>
+  <tr>
+    <td width="50%"><img src="docs/screenshots/05-call-connecting.png" alt="Cửa sổ Zalo Call đang nối máy" /></td>
+    <td width="50%"><img src="docs/screenshots/06-call-video.png" alt="Cuộc gọi video đang diễn ra" /></td>
+  </tr>
+  <tr>
+    <td align="center"><b>① Đang nối máy</b><br/><sub>Cửa sổ Zalo Call tự nổi lên trên cửa sổ chính</sub></td>
+    <td align="center"><b>② Đang gọi video</b><br/><sub>Đếm giờ, bật/tắt mic, camera, chia sẻ màn hình</sub></td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="docs/screenshots/07-share-confirm.png" alt="Hộp thoại xác nhận bắt đầu trình chiếu" /></td>
+    <td width="50%"><img src="docs/screenshots/08-share-portal.png" alt="Hộp thoại chọn màn hình của GNOME khi chia sẻ" /></td>
+  </tr>
+  <tr>
+    <td align="center"><b>③ Bắt đầu trình chiếu</b><br/><sub>Hộp thoại của Zalo, tuỳ chọn chia sẻ cả âm thanh</sub></td>
+    <td align="center"><b>④ Chọn màn hình</b><br/><sub>Hộp thoại chuẩn của hệ thống (XDG portal) trên Wayland</sub></td>
+  </tr>
+</table>
+
 ## ✨ Tính năng
 
 ### Nhắn tin và dữ liệu
@@ -87,6 +143,8 @@ Cảm ơn **[@realdtn2](https://github.com/realdtn2)** với giải pháp gốc
 | Chia sẻ màn hình trên Wayland | ✅ | ❌ | Qua cầu nối XDG ScreenCast → Xvfb |
 | Tự tải Wine khi cần | ✅ | — | ~54 MB, lưu trong thư mục dữ liệu app |
 | Bản **Full** có sẵn Wine | ✅ | — | Gọi được ngay lần mở đầu, không cần mạng |
+| Cửa sổ gọi tự nổi lên trên (GNOME) | ✅ | — | `zcall-raise` sửa lỗi cửa sổ gọi mở bị thu nhỏ hoặc nằm sau Zalo, và kẹt lại sau khi tắt máy |
+| Dọn tiến trình gọi còn sót | ✅ | — | Tự dọn `pipebridge.exe`/`ZaloCall.exe` của lần thoát lỗi trước, cổng 29631/29632 chỉ nghe trên `127.0.0.1` |
 
 > Gọi điện chưa hỗ trợ ARM64 vì `ZaloCall.exe` chỉ có bản x86.
 
@@ -101,7 +159,10 @@ Cảm ơn **[@realdtn2](https://github.com/realdtn2)** với giải pháp gốc
 | Đếm tin chưa đọc trên dock/taskbar | Giao thức badge của Unity/KDE/GNOME |
 | Tự theo chế độ sáng/tối của hệ thống | GNOME D-Bus, XDG Desktop Portal hoặc gtk-theme |
 | Chụp màn hình trong app | Dùng công cụ có sẵn trên máy, tự dán ảnh vào khung chat |
-| Thanh tiêu đề đủ nút thu nhỏ / phóng to / đóng | Chạy được trên nhiều window manager |
+| Thanh tiêu đề riêng, bo góc 10px | Không còn menu Electron (Zalo/File/View/Window) và khoảng trống thừa |
+| Nút gạt sáng/tối trên thanh tiêu đề | Bấm để ghim giao diện kia, chuột phải để theo lại hệ thống. Ghi nhớ sau khi mở lại app |
+| Nút đóng | Thu xuống khay; thoát hẳn nếu desktop không có khay hệ thống (GNOME mặc định) |
+| Mở chat ở cửa sổ riêng | Nhiều cửa sổ cùng lúc, mỗi cửa sổ có nút đóng, kéo thả, bo góc |
 | Tự cập nhật | App báo khi có bản mới, cập nhật ngay trong app (zsync) |
 
 ### Mở rộng
@@ -420,10 +481,10 @@ ZaloSetup-universal-<ver>.dmg ──7z──▶ app.asar ──▶ app/
 | Thành phần | Vai trò |
 |---|---|
 | [`main.js`](./main.js) | Vỏ Electron: khay hệ thống, DevTools, nạp plugin, rồi nạp app Zalo đã giải nén |
-| [`scripts/patches/`](./scripts/patches) | 20 bản vá: thanh tiêu đề, sqlite3, dán ảnh, resize ảnh, autostart, thư mục XDG, badge, theme tự động, mạng/đồng bộ, hàng đợi tín hiệu cuộc gọi, cổng gọi điện, call-v2 qua Wine… |
+| [`scripts/patches/`](./scripts/patches) | 24 bản vá: thanh tiêu đề, sqlite3, dán ảnh, resize ảnh, autostart, thư mục XDG, badge, theme tự động, mạng/đồng bộ, hàng đợi tín hiệu cuộc gọi, cổng gọi điện, call-v2 qua Wine, giao diện cửa sổ, nhiều cửa sổ chat, tinh chỉnh Wine… |
 | [`nativelibs/`](./nativelibs/README.md) | Addon native viết lại cho Linux: `db-cross-v4` (C++), `file-utilities`, `file-utils`, `mp4thumb`, `zimage`, `zjxl` (Rust) |
 | [`plugins/`](./plugins) | `screenshot`, `launcher-badge`, `start-hidden`, `userscripts`, `zcall-bridge`, `zadark` |
-| [`zcall-bridge/`](./zcall-bridge/README.md) | `pipebridge.c` (named pipe ⇄ TCP), `streamproxy.c` (shim chụp màn hình), `screenbridge.py` (cầu nối Wayland) |
+| [`zcall-bridge/`](./zcall-bridge/README.md) | `pipebridge.c` (named pipe ⇄ TCP), `streamproxy.c` (shim chụp màn hình), `screenbridge.py` (cầu nối Wayland), `zcall-raise.c` (đưa cửa sổ gọi lên trên) |
 
 Không có mã nguồn Zalo nào được commit vào repo; mọi thay đổi được áp lại ở mỗi lần build.
 Xem thêm [ARCHITECTURE.md](./ARCHITECTURE.md).
@@ -504,6 +565,14 @@ có tham số `--hidden`.
 </details>
 
 <details>
+<summary><b>Cửa sổ cuộc gọi mở bị ẩn sau Zalo hoặc vẫn còn sau khi tắt máy</b></summary>
+
+`zcall-raise` xử lý việc này trên X11/XWayland. Nếu vẫn gặp, chạy app từ terminal với
+`ZCALL_RAISE_DEBUG=1` để xem nhật ký và gửi kèm khi báo lỗi.
+
+</details>
+
+<details>
 <summary><b>Cần xem log hoặc gỡ lỗi</b></summary>
 
 - Mở DevTools: `Ctrl+Shift+I`, hoặc **menu khay → Toggle DevTools**.
@@ -559,6 +628,7 @@ with Linux reimplementations (C++/Rust), and patches the app for Linux desktops.
   downloaded on first use, or bundled in the **Full** AppImage
 - Screen sharing on Wayland through a built-in bridge (XDG ScreenCast portal → PipeWire →
   GStreamer → headless Xvfb → `LD_PRELOAD` shim reading frames over MIT-SHM)
+- Custom title bar with rounded corners and a light/dark switch; chats in separate windows
 - Tray icon, start hidden (`--hidden`), autostart, unread badge, follows the system
   light/dark theme, in-app screenshot with auto-paste, built-in updater
 - Integrated ZaDark and a Tampermonkey-style userscripts manager
