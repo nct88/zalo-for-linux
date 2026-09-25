@@ -46,13 +46,34 @@ const THEME_MAIN_INJECTION = `
     return false;
   }
 
+  // Theme mode chosen with the title-bar switch: "system" follows the desktop,
+  // "light"/"dark" pin it. Persisted next to Zalo's own data.
+  const _modeFile = require("path").join(_app.getPath("userData"), "zalo-linux-theme.json");
+  let _mode = "system";
+  try {
+    const m = JSON.parse(require("fs").readFileSync(_modeFile, "utf8")).mode;
+    if (m === "light" || m === "dark") _mode = m;
+  } catch (_) {}
+  const effectiveDark = () => _mode === "system" ? isLinuxDark() : _mode === "dark";
+  const modeState = () => ({ mode: _mode, effective: effectiveDark() ? "dark" : "light" });
+
   _ipc.removeHandler("zalo-linux-get-theme");
-  _ipc.handle("zalo-linux-get-theme", () => isLinuxDark() ? "dark" : "light");
+  _ipc.handle("zalo-linux-get-theme", () => effectiveDark() ? "dark" : "light");
+  _ipc.removeHandler("zalo-linux-get-theme-mode");
+  _ipc.handle("zalo-linux-get-theme-mode", () => modeState());
+  _ipc.removeHandler("zalo-linux-set-theme-mode");
+  _ipc.handle("zalo-linux-set-theme-mode", (_e, mode) => {
+    if (mode !== "system" && mode !== "light" && mode !== "dark") return modeState();
+    _mode = mode;
+    try { require("fs").writeFileSync(_modeFile, JSON.stringify({ mode })); } catch (_) {}
+    syncTheme(true);
+    return modeState();
+  });
 
   let _lastDark = null;
-  function syncTheme() {
-    const d = isLinuxDark();
-    if (d !== _lastDark) {
+  function syncTheme(force) {
+    const d = effectiveDark();
+    if (force === true || d !== _lastDark) {
       _lastDark = d;
       _nt.themeSource = d ? "dark" : "light";
       _bw.getAllWindows().forEach((w) => {

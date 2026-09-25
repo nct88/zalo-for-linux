@@ -48,12 +48,10 @@ const ROUNDED_PRELOAD_INJECTION = `
         border-radius: 12px !important;
         clip-path: inset(0 round 12px) !important;
         overflow: hidden !important;
-        border: 1px solid rgba(0, 0, 0, 0.14) !important;
-      }
-
-      html.dark body,
-      body.dark {
-        border: 1px solid rgba(255, 255, 255, 0.12) !important;
+        /* No border: on the rounded corners its anti-aliased outer pixels lie
+           outside the content, so a semi-transparent border shows as a light
+           (dark theme) or grey (light theme) jagged ring over the desktop. */
+        border: none !important;
       }
 
       html.is-maximized body,
@@ -76,6 +74,16 @@ const ROUNDED_PRELOAD_INJECTION = `
       html.dark #loading-page,
       body.dark #loading-page {
         background-color: var(--layer-background, #22262B) !important;
+      }
+
+      /* Render #app as one surface so the rounded body clip is applied once.
+         Otherwise every layer is clipped on its own and the lower ones (the
+         white/grey #app and #sidebarNav backgrounds) bleed through the
+         anti-aliased edge of the sidebar: a pale ring on the rounded corners.
+         #app covers the whole viewport at 0,0, so being the containing block
+         for position:fixed popups does not move them. */
+      html:not(.is-maximized) #app {
+        filter: brightness(1.0001) !important;
       }
 
       #titleBar {
@@ -125,8 +133,36 @@ const ROUNDED_PRELOAD_INJECTION = `
         max-height: calc(100% - 38px) !important;
       }
 
-      #sidebarNav, #main-tab {
+      #sidebarNav {
         height: 100% !important;
+      }
+
+      /* Zalo pulls #container and #main-tab up 24px (its macOS title bar
+         height). With the 38px title bar both must go up 38px and the sidebar
+         grow by as much, otherwise #app shows above it (14px) and #sidebarNav
+         below it (24px): white strips in light mode, grey in dark mode.
+         #container clips its children (overflow: hidden), so it has to move
+         too; its padding keeps the chat content below the title bar, and the
+         sidebar's 14px padding keeps its icons where they were. */
+      #container:not(.WEB) {
+        margin-top: -38px !important;
+        padding-top: 38px !important;
+      }
+      #main-tab:not(.WEB) {
+        margin-top: -38px !important;
+        height: calc(100% + 38px) !important;
+      }
+      html:not(:has(.title-bar-feature)) #main-tab:not(.WEB) {
+        padding-top: 14px;
+      }
+      /* keep Zalo's own full-height layout when its system banner is shown */
+      .use-system-banner:has(.system-banner__container) #container:not(.WEB) {
+        margin-top: -56px !important;
+        padding-top: 56px !important;
+      }
+      .use-system-banner:has(.system-banner__container) #main-tab:not(.WEB) {
+        margin-top: 0px !important;
+        height: 100vh !important;
       }
 
       .zalo-linux-tb-controls {
@@ -178,6 +214,90 @@ const ROUNDED_PRELOAD_INJECTION = `
       body.is-maximized .zalo-linux-close-button {
         border-top-right-radius: 0px !important;
       }
+
+      /* Light/dark switch next to the close button. Id selectors and
+         !important keep Zalo's global button styles off it. */
+      #zalo-linux-theme-toggle {
+        -webkit-app-region: no-drag !important;
+        appearance: none !important;
+        display: flex !important;
+        align-items: center !important;
+        height: 38px !important;
+        padding: 0 8px !important;
+        margin: 0 2px 0 0 !important;
+        border: none !important;
+        background: transparent !important;
+        outline: none !important;
+        cursor: pointer !important;
+      }
+      #zalo-linux-theme-toggle[hidden] {
+        display: none !important;
+      }
+      #zalo-linux-theme-toggle .zl-theme-track {
+        position: relative;
+        width: 34px;
+        height: 20px;
+        border-radius: 10px;
+        background: rgba(0, 0, 0, 0.14);
+        transition: background-color 0.22s ease;
+      }
+      #zalo-linux-theme-toggle:hover .zl-theme-track {
+        background: rgba(0, 0, 0, 0.2);
+      }
+      #zalo-linux-theme-toggle .zl-theme-thumb {
+        position: absolute;
+        top: 2px;
+        left: 2px;
+        width: 16px;
+        height: 16px;
+        border-radius: 50%;
+        background: #ffffff;
+        color: #f59e0b;
+        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+        transition: transform 0.22s cubic-bezier(0.4, 0, 0.2, 1), background-color 0.22s ease, color 0.22s ease;
+      }
+      #zalo-linux-theme-toggle .zl-theme-thumb svg {
+        position: absolute;
+        top: 3px;
+        left: 3px;
+        width: 10px;
+        height: 10px;
+        transition: opacity 0.22s ease, transform 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+      }
+      #zalo-linux-theme-toggle .zl-moon {
+        opacity: 0;
+        transform: rotate(-90deg) scale(0.5);
+      }
+      #zalo-linux-theme-toggle.is-dark .zl-theme-track {
+        background: rgba(255, 255, 255, 0.18);
+      }
+      #zalo-linux-theme-toggle.is-dark:hover .zl-theme-track {
+        background: rgba(255, 255, 255, 0.26);
+      }
+      #zalo-linux-theme-toggle.is-dark .zl-theme-thumb {
+        transform: translateX(14px);
+        background: #e6e9ed;
+        color: #2b3138;
+      }
+      #zalo-linux-theme-toggle.is-dark .zl-sun {
+        opacity: 0;
+        transform: rotate(90deg) scale(0.5);
+      }
+      #zalo-linux-theme-toggle.is-dark .zl-moon {
+        opacity: 1;
+        transform: none;
+      }
+      #zalo-linux-theme-toggle:focus-visible .zl-theme-track {
+        outline: 2px solid #0068ff;
+        outline-offset: 2px;
+      }
+      @media (prefers-reduced-motion: reduce) {
+        #zalo-linux-theme-toggle .zl-theme-track,
+        #zalo-linux-theme-toggle .zl-theme-thumb,
+        #zalo-linux-theme-toggle .zl-theme-thumb svg {
+          transition: none !important;
+        }
+      }
     \`;
     (document.head || document.documentElement).appendChild(style);
   }
@@ -225,8 +345,60 @@ const ROUNDED_PRELOAD_INJECTION = `
       }
     });
 
+    controls.appendChild(createThemeToggle());
     controls.appendChild(closeBtn);
     tb.appendChild(controls);
+  }
+
+  // Light/dark switch. Click pins the opposite theme, right-click returns to
+  // following the desktop. The main process owns the mode (patch-auto-theme)
+  // and broadcasts the change, so the switch only mirrors html.dark. Hidden
+  // in windows whose main process does not answer (no theme IPC there).
+  function createThemeToggle() {
+    const tgl = document.createElement("button");
+    tgl.id = "zalo-linux-theme-toggle";
+    tgl.type = "button";
+    tgl.hidden = true;
+    tgl.setAttribute("role", "switch");
+    tgl.setAttribute("aria-label", "Giao diện tối");
+    tgl.innerHTML = '<span class="zl-theme-track"><span class="zl-theme-thumb">' +
+      '<svg class="zl-sun" viewBox="0 0 12 12" aria-hidden="true"><circle cx="6" cy="6" r="2.3" fill="currentColor"/>' +
+      '<path d="M6 .9v1.2M6 9.9v1.2M.9 6h1.2M9.9 6h1.2M2.4 2.4l.85.85M8.75 8.75l.85.85M2.4 9.6l.85-.85M8.75 3.25l.85-.85" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>' +
+      '<svg class="zl-moon" viewBox="0 0 12 12" aria-hidden="true"><path d="M10 7.7A4.4 4.4 0 0 1 4.3 2a4.4 4.4 0 1 0 5.7 5.7z" fill="currentColor"/></svg>' +
+      '</span></span>';
+
+    let mode = "system";
+    const isDark = () => document.documentElement.classList.contains("dark");
+    const render = () => {
+      const dark = isDark();
+      tgl.classList.toggle("is-dark", dark);
+      tgl.setAttribute("aria-checked", dark ? "true" : "false");
+      tgl.title = (dark ? "Chuyển sang giao diện sáng" : "Chuyển sang giao diện tối") +
+        (mode === "system" ? " (đang theo hệ thống)" : " · chuột phải: theo hệ thống");
+    };
+    const apply = (state) => {
+      if (state && state.mode) mode = state.mode;
+      render();
+    };
+    const setMode = (next) => ipcRenderer.invoke("zalo-linux-set-theme-mode", next).then(apply).catch(() => {});
+
+    tgl.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      setMode(isDark() ? "light" : "dark");
+    });
+    tgl.addEventListener("contextmenu", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      setMode("system");
+    });
+    new MutationObserver(render).observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });
+
+    ipcRenderer.invoke("zalo-linux-get-theme-mode").then((state) => {
+      tgl.hidden = false;
+      apply(state);
+    }).catch(() => tgl.remove());
+    return tgl;
   }
 
   function handleMaximized(isMax) {
@@ -508,17 +680,22 @@ try {
       // Ensure inline style doesn't have an opaque body background and has full rounded styles
       const fullInlineStyle = '<style id="zalo-transparent-base">' +
         'html{background:transparent !important;background-color:transparent !important;overflow:hidden !important;margin:0 !important;padding:0 !important;width:100% !important;height:100% !important;}' +
-        'body{margin:0 !important;padding:0 !important;width:100% !important;height:100% !important;box-sizing:border-box !important;background:transparent !important;background-color:transparent !important;border-radius:12px !important;clip-path:inset(0 round 12px) !important;overflow:hidden !important;border:1px solid rgba(0,0,0,0.14) !important;}' +
-        'html.dark body,body.dark{border:1px solid rgba(255,255,255,0.12) !important;}' +
+        'body{margin:0 !important;padding:0 !important;width:100% !important;height:100% !important;box-sizing:border-box !important;background:transparent !important;background-color:transparent !important;border-radius:12px !important;clip-path:inset(0 round 12px) !important;overflow:hidden !important;border:none !important;}' +
         'html.is-maximized body,body.is-maximized{border-radius:0px !important;clip-path:none !important;border:none !important;}' +
         '#app,#loading-page{width:100% !important;height:100% !important;box-sizing:border-box !important;background-color:var(--layer-background,#ffffff) !important;}' +
         'html.dark #app,body.dark #app,html.dark #loading-page,body.dark #loading-page{background-color:var(--layer-background,#22262B) !important;}' +
+        'html:not(.is-maximized) #app{filter:brightness(1.0001) !important;}' +
         '#titleBar{height:38px !important;min-height:38px !important;width:100% !important;max-width:100% !important;box-sizing:border-box !important;padding:0 0 0 16px !important;display:flex !important;align-items:center !important;justify-content:space-between !important;-webkit-app-region:drag !important;position:relative !important;z-index:100 !important;}' +
         'body:has(#main-tab) #titleBar,body:has(#sidebarNav) #titleBar{left:64px !important;width:calc(100% - 64px) !important;max-width:calc(100% - 64px) !important;}' +
         '#titleBar .title-drag{height:38px !important;top:0 !important;left:0 !important;right:60px !important;width:auto !important;-webkit-app-region:drag !important;}' +
         '#titleBar .title-name{line-height:38px !important;height:38px !important;display:flex !important;align-items:center !important;font-size:13px !important;font-weight:500 !important;-webkit-app-region:drag !important;user-select:none !important;}' +
         '#container{height:calc(100% - 38px) !important;max-height:calc(100% - 38px) !important;}' +
-        '#sidebarNav,#main-tab{height:100% !important;}' +
+        '#sidebarNav{height:100% !important;}' +
+        '#container:not(.WEB){margin-top:-38px !important;padding-top:38px !important;}' +
+        '#main-tab:not(.WEB){margin-top:-38px !important;height:calc(100% + 38px) !important;}' +
+        'html:not(:has(.title-bar-feature)) #main-tab:not(.WEB){padding-top:14px;}' +
+        '.use-system-banner:has(.system-banner__container) #container:not(.WEB){margin-top:-56px !important;padding-top:56px !important;}' +
+        '.use-system-banner:has(.system-banner__container) #main-tab:not(.WEB){margin-top:0px !important;height:100vh !important;}' +
         '.zalo-linux-tb-controls{display:flex !important;align-items:center !important;height:100% !important;margin-left:auto !important;-webkit-app-region:no-drag !important;z-index:1000 !important;}' +
         '.zalo-linux-close-button{-webkit-app-region:no-drag !important;pointer-events:auto !important;cursor:pointer !important;width:48px !important;height:38px !important;display:flex !important;align-items:center !important;justify-content:center !important;background:transparent !important;border:none !important;outline:none !important;padding:0 !important;margin:0 !important;color:var(--text-secondary,#999999) !important;border-top-right-radius:12px !important;transition:background-color 0.15s ease,color 0.15s ease !important;}' +
         '.zalo-linux-close-button svg{width:12px !important;height:12px !important;display:block !important;pointer-events:none !important;}' +
