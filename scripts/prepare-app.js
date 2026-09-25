@@ -151,8 +151,11 @@ async function extractAppAsar() {
   // Apply patches
   logger.info('Applying platform patches...');
 
-  const { main: patchTitlebar } = require('./patches/patch-titlebar');
-  await patchTitlebar();
+  // const { main: patchTitlebar } = require('./patches/patch-titlebar');
+  // await patchTitlebar();
+
+  const { main: patchRemoveMenu } = require('./patches/patch-remove-menu');
+  await patchRemoveMenu();
 
   const { main: patchPastingImg } = require('./patches/patch-pasting-img');
   await patchPastingImg();
@@ -210,6 +213,15 @@ async function extractAppAsar() {
 
   const { main: patchAutoTheme } = require('./patches/patch-auto-theme');
   await patchAutoTheme();
+
+  const { main: patchWindowAppearance } = require('./patches/patch-window-appearance');
+  await patchWindowAppearance();
+
+  const { main: patchMultiWindow } = require('./patches/patch-multi-window');
+  await patchMultiWindow();
+
+  const { main: patchZcallWineTuning } = require('./patches/patch-zcall-wine-tuning');
+  await patchZcallWineTuning();
 }
 
 function commandExists(command) {
