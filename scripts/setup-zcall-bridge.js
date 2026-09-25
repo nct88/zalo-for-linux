@@ -172,7 +172,7 @@ async function main() {
       const cc = process.env.CC || 'gcc';
       const cflags = process.env.CFLAGS || '';
       const ldflags = process.env.LDFLAGS || '';
-      execSync(`${cc} -m32 ${cflags} -shared -fPIC -O2 "${proxySrc}" -ldl -lX11 -lxcb ${ldflags} -o "${proxySo}"`, {
+      execSync(`${cc} -m32 ${cflags} -shared -fPIC -O2 "${proxySrc}" -ldl -lpthread -lX11 -lXext -lxcb ${ldflags} -o "${proxySo}"`, {
         cwd: ROOT, stdio: 'pipe'
       });
       logger.dim('streamproxy.so (32-bit) compiled from source');

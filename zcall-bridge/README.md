@@ -239,7 +239,8 @@ Bridge chạy **Xvfb headless** làm màn hình render (`:99`): màn hình Wayla
 native trên màn hình thật**; `streamproxy.so` (shim LD_PRELOAD, build sẵn
 theo app) chặn đúng các lời gọi chụp màn hình của ZaloCall
 (`XGetImage`/`XShmGetImage`/`xcb_get_image` trên root) và **trả về nội dung
-từ `:99`** — nên phần còn lại của app (giao diện, âm thanh, video) không
+từ `:99`** (đọc qua MIT-SHM — bộ nhớ chia sẻ với Xvfb, không truyền
+cả khung hình qua socket) — nên phần còn lại của app (giao diện, âm thanh, video) không
 đổi, chỉ riêng hình ảnh chia sẻ đi qua bridge. Shim cũng **tự báo hiệu**
 (bằng file request) khi phát hiện lần chụp màn hình đầu tiên — app theo
 dõi và tự khởi động bridge, nên không cần thao tác nào thêm. Nếu người

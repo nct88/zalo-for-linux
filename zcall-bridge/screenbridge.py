@@ -148,10 +148,15 @@ def run():
         print("portal denied or no streams", file=sys.stderr)
         sys.exit(1)
 
+    # The one-buffer leaky queue drops stale frames instead of letting them
+    # pile up behind a slow convert, so the shared screen lags less; the
+    # convert itself uses every core (n-threads=0).
     cmd = [
         "gst-launch-1.0",
         "pipewiresrc", "path=%d" % state["node_id"],
-        "!", "videoconvert",
+        "!", "queue", "max-size-buffers=1", "max-size-bytes=0",
+        "max-size-time=0", "leaky=downstream",
+        "!", "videoconvert", "n-threads=0",
         "!", "ximagesink", "display=%s" % DISPLAY2, "sync=false",
     ]
     os.environ["DISPLAY"] = DISPLAY2
