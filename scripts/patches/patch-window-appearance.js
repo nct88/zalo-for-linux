@@ -96,9 +96,11 @@ const ROUNDED_PRELOAD_INJECTION = `
         display: flex !important;
         align-items: center !important;
         justify-content: space-between !important;
-        -webkit-app-region: drag !important;
+        -webkit-app-region: no-drag !important;
+        user-select: none !important;
         position: relative !important;
         z-index: 100 !important;
+        cursor: default !important;
       }
 
       body:has(#main-tab) #titleBar,
@@ -114,7 +116,8 @@ const ROUNDED_PRELOAD_INJECTION = `
         left: 0 !important;
         right: 60px !important;
         width: auto !important;
-        -webkit-app-region: drag !important;
+        -webkit-app-region: no-drag !important;
+        cursor: default !important;
       }
 
       #titleBar .title-name {
@@ -124,8 +127,9 @@ const ROUNDED_PRELOAD_INJECTION = `
         align-items: center !important;
         font-size: 13px !important;
         font-weight: 500 !important;
-        -webkit-app-region: drag !important;
+        -webkit-app-region: no-drag !important;
         user-select: none !important;
+        cursor: default !important;
       }
 
       #container {
@@ -212,6 +216,106 @@ const ROUNDED_PRELOAD_INJECTION = `
 
       html.is-maximized .zalo-linux-close-button,
       body.is-maximized .zalo-linux-close-button {
+        border-top-right-radius: 0px !important;
+      }
+
+      /* In child window: hide redundant top #titleBar, make chat header the titlebar */
+      body.child-window #titleBar,
+      body:not(:has(#main-tab)):not(:has(#sidebarNav)) #titleBar,
+      .child-mode #titleBar,
+      #titleBar:has(.child-mode) {
+        display: none !important;
+      }
+
+      body.child-window #container,
+      body:not(:has(#main-tab)):not(:has(#sidebarNav)) #container {
+        margin-top: 0px !important;
+        padding-top: 0px !important;
+        height: 100% !important;
+        max-height: 100% !important;
+      }
+
+      body.child-window header#header,
+      body:not(:has(#main-tab)):not(:has(#sidebarNav)) header#header {
+        height: 54px !important;
+        min-height: 54px !important;
+        padding-right: 48px !important;
+        -webkit-app-region: no-drag !important;
+        border-top-left-radius: 12px !important;
+        border-top-right-radius: 12px !important;
+        user-select: none !important;
+        cursor: default !important;
+      }
+
+      body.child-window header#header *,
+      body:not(:has(#main-tab)):not(:has(#sidebarNav)) header#header * {
+        -webkit-app-region: no-drag !important;
+      }
+
+      body.child-window header#header .threadChat,
+      body:not(:has(#main-tab)):not(:has(#sidebarNav)) header#header .threadChat {
+        -webkit-app-region: no-drag !important;
+        user-select: none !important;
+        cursor: default !important;
+      }
+
+      body.child-window #headerBtns,
+      body:not(:has(#main-tab)):not(:has(#sidebarNav)) #headerBtns {
+        margin-left: auto !important;
+        display: flex !important;
+        align-items: center !important;
+        -webkit-app-region: no-drag !important;
+      }
+
+      #zalo-linux-child-close-btn {
+        position: fixed !important;
+        top: 0 !important;
+        right: 0 !important;
+        width: 48px !important;
+        height: 54px !important;
+        min-height: 54px !important;
+        z-index: 99999 !important;
+        -webkit-app-region: no-drag !important;
+        pointer-events: auto !important;
+        cursor: pointer !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        background: transparent !important;
+        border: none !important;
+        outline: none !important;
+        padding: 0 !important;
+        margin: 0 !important;
+        color: var(--text-secondary, #999999) !important;
+        border-top-right-radius: 12px !important;
+        transition: background-color 0.15s ease, color 0.15s ease !important;
+      }
+
+      #zalo-linux-child-close-btn svg {
+        width: 12px !important;
+        height: 12px !important;
+        display: block !important;
+        pointer-events: none !important;
+      }
+
+      #zalo-linux-child-close-btn:hover {
+        background-color: #e81123 !important;
+        color: #ffffff !important;
+      }
+
+      #zalo-linux-child-close-btn:active {
+        background-color: #c40e1d !important;
+        color: #ffffff !important;
+      }
+
+      html.is-maximized #zalo-linux-child-close-btn,
+      body.is-maximized #zalo-linux-child-close-btn {
+        border-top-right-radius: 0px !important;
+      }
+
+      html.is-maximized body.child-window header#header,
+      html.is-maximized body:not(:has(#main-tab)):not(:has(#sidebarNav)) header#header {
+        border-top-left-radius: 0px !important;
         border-top-right-radius: 0px !important;
       }
 
@@ -319,6 +423,40 @@ const ROUNDED_PRELOAD_INJECTION = `
   }
 
   function ensureCloseButton() {
+    const isChildWindow = !document.getElementById("main-tab") && !document.getElementById("sidebarNav") && (window.location.href.includes("child") || window.__ZaBUNDLENAME__ === "child" || !!document.getElementById("header"));
+
+    if (isChildWindow) {
+      document.documentElement.classList.add("child-window");
+      if (document.body) document.body.classList.add("child-window");
+
+      const topTb = document.getElementById("titleBar");
+      if (topTb) {
+        topTb.style.setProperty("display", "none", "important");
+      }
+
+      if (document.getElementById("zalo-linux-child-close-btn")) return;
+
+      const closeBtn = document.createElement("button");
+      closeBtn.id = "zalo-linux-child-close-btn";
+      closeBtn.className = "zalo-linux-close-button";
+      closeBtn.title = "Đóng";
+      closeBtn.setAttribute("aria-label", "Đóng");
+      closeBtn.innerHTML = '<svg width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M2 2L10 10M10 2L2 10" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+
+      closeBtn.addEventListener("click", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        try {
+          ipcRenderer.send("zalo-window-close");
+        } catch (_) {
+          window.close();
+        }
+      });
+
+      document.body.appendChild(closeBtn);
+      return;
+    }
+
     const tb = document.getElementById("titleBar");
     if (!tb) return;
     adjustTitleBarLayout();
@@ -421,14 +559,77 @@ const ROUNDED_PRELOAD_INJECTION = `
     }).catch(() => {});
   } catch (_) {}
 
+  function attachDrag(el) {
+    if (!el || el.__zalo_drag_attached) return;
+    el.__zalo_drag_attached = true;
+
+    let isDragging = false;
+    let startScreenX = 0;
+    let startScreenY = 0;
+
+    function stopDrag(e) {
+      if (isDragging) {
+        isDragging = false;
+        try {
+          if (e && e.pointerId !== undefined) {
+            el.releasePointerCapture(e.pointerId);
+          }
+        } catch (_) {}
+        ipcRenderer.send("zalo-window-drag-end");
+      }
+    }
+
+    el.addEventListener("pointerdown", (e) => {
+      if (e.button !== 0) return;
+      if (e.target.closest("button, a, input, select, textarea, [role='button'], .clickable, #headerBtns, .zalo-linux-close-button, #zalo-linux-theme-toggle")) {
+        return;
+      }
+      try { el.setPointerCapture(e.pointerId); } catch (_) {}
+      isDragging = true;
+      startScreenX = e.screenX;
+      startScreenY = e.screenY;
+      ipcRenderer.send("zalo-window-drag-start");
+    });
+
+    el.addEventListener("pointermove", (e) => {
+      if (!isDragging) return;
+      const deltaX = e.screenX - startScreenX;
+      const deltaY = e.screenY - startScreenY;
+      ipcRenderer.send("zalo-window-drag-move", { deltaX, deltaY });
+    });
+
+    el.addEventListener("pointerup", stopDrag);
+    el.addEventListener("pointercancel", stopDrag);
+    window.addEventListener("pointerup", stopDrag);
+    window.addEventListener("pointercancel", stopDrag);
+
+    el.addEventListener("dblclick", (e) => {
+      if (e.button !== 0) return;
+      if (e.target.closest("button, a, input, select, textarea, [role='button'], .clickable, #headerBtns, .zalo-linux-close-button, #zalo-linux-theme-toggle")) {
+        return;
+      }
+      ipcRenderer.send("zalo-window-toggle-maximize");
+    });
+  }
+
+  function setupDraggableHeaders() {
+    const tb = document.getElementById("titleBar");
+    if (tb) attachDrag(tb);
+
+    const hdr = document.getElementById("header");
+    if (hdr) attachDrag(hdr);
+  }
+
   function initUI() {
     injectRoundedStyle();
     adjustTitleBarLayout();
     ensureCloseButton();
+    setupDraggableHeaders();
     try {
       const observer = new MutationObserver(() => {
         adjustTitleBarLayout();
         ensureCloseButton();
+        setupDraggableHeaders();
       });
       observer.observe(document.body || document.documentElement, { childList: true, subtree: true });
     } catch (_) {}
@@ -441,6 +642,20 @@ const ROUNDED_PRELOAD_INJECTION = `
   }
 })();
 `;
+
+// Child ("Mở cửa sổ riêng") windows come from window.open() and live in the
+// main window's renderer process. Giving them the full preload-render.js made
+// that shared renderer re-run Zalo's whole bootstrap inside window.open() and
+// deadlock: the child stayed loading forever and the main window froze. They
+// get a preload that carries only the Linux window chrome (close button, drag,
+// rounded corners) instead.
+const CHILD_PRELOAD_FILE = 'preload-child-linux.js';
+const CHILD_PRELOAD_EXPR = 'require("path").join(__dirname,"' + CHILD_PRELOAD_FILE + '")';
+const OLD_CHILD_PRELOAD_EXPR = 'require("path").join(__dirname,"preload-render.js")';
+
+function useChildPreload(content) {
+  return content.split('{preload:' + OLD_CHILD_PRELOAD_EXPR + '}').join('{preload:' + CHILD_PRELOAD_EXPR + '}');
+}
 
 const SUPPRESS_SET_BG_CODE = `
 // --- Zalo Linux Window Background Transparency Preservation ---
@@ -474,6 +689,47 @@ try {
     try {
       const win = _zBW.fromWebContents(ev.sender);
       if (win && !win.isDestroyed()) win.close();
+    } catch (_) {}
+  });
+  _zIpc.removeAllListeners('zalo-window-drag-start');
+  _zIpc.on('zalo-window-drag-start', (ev) => {
+    try {
+      const win = _zBW.fromWebContents(ev.sender);
+      if (win && !win.isDestroyed()) {
+        win.__dragStartPos = win.getPosition();
+      }
+    } catch (_) {}
+  });
+  _zIpc.removeAllListeners('zalo-window-drag-move');
+  _zIpc.on('zalo-window-drag-move', (ev, data) => {
+    try {
+      const win = _zBW.fromWebContents(ev.sender);
+      if (win && !win.isDestroyed() && !win.isMaximized()) {
+        if (!win.__dragStartPos) {
+          win.__dragStartPos = win.getPosition();
+        }
+        const [startX, startY] = win.__dragStartPos;
+        win.setPosition(Math.round(startX + data.deltaX), Math.round(startY + data.deltaY));
+      }
+    } catch (_) {}
+  });
+  _zIpc.removeAllListeners('zalo-window-drag-end');
+  _zIpc.on('zalo-window-drag-end', (ev) => {
+    try {
+      const win = _zBW.fromWebContents(ev.sender);
+      if (win) {
+        win.__dragStartPos = null;
+      }
+    } catch (_) {}
+  });
+  _zIpc.removeAllListeners('zalo-window-toggle-maximize');
+  _zIpc.on('zalo-window-toggle-maximize', (ev) => {
+    try {
+      const win = _zBW.fromWebContents(ev.sender);
+      if (win && !win.isDestroyed()) {
+        if (win.isMaximized()) win.unmaximize();
+        else win.maximize();
+      }
     } catch (_) {}
   });
   // Tray host probe: the main window close handler hides to tray only when
@@ -593,6 +849,38 @@ async function main() {
       }
     }
 
+    // Patch child window options in main.js
+    const childOptsNeedle = 't&&(this.childOpts=t,this.childOpts.modal=!0,this.childOpts.frame=!0)';
+    const childOptsReplacement = 't&&(this.childOpts=t,this.childOpts.modal=!1,this.childOpts.frame=!1,this.childOpts.transparent=!0,this.childOpts.backgroundColor="#00000000",this.childOpts.hasShadow=!1,this.childOpts.titleBarStyle="hidden",this.childOpts.webPreferences=Object.assign({},(this.mainOpts&&this.mainOpts.webPreferences)||{},{preload:'+CHILD_PRELOAD_EXPR+'}))';
+    if (content.includes(childOptsNeedle)) {
+      content = content.replace(childOptsNeedle, childOptsReplacement);
+      changed = true;
+      logger.dim('Patched childOpts in setUpConfiguration (main.js)');
+    }
+
+    const winOpenNeedle = 'overrideBrowserWindowOptions:r(r(r({frame:!1,show:!1,titleBarStyle:"hidden",resizable:!0,transparent:!0,backgroundColor:"#00000000",hasShadow:!1},e),this.childOpts),this.childWindowSize)}}';
+    const winOpenReplacement = 'overrideBrowserWindowOptions:r(r(r(r({frame:!1,show:!1,titleBarStyle:"hidden",resizable:!0,transparent:!0,backgroundColor:"#00000000",hasShadow:!1},e),this.childOpts),this.childWindowSize),{frame:!1,transparent:!0,backgroundColor:"#00000000",hasShadow:!1,titleBarStyle:"hidden",webPreferences:Object.assign({},(this.mainOpts&&this.mainOpts.webPreferences)||{},{preload:'+CHILD_PRELOAD_EXPR+'})})}}';
+    if (content.includes(winOpenNeedle)) {
+      content = content.replace(winOpenNeedle, winOpenReplacement);
+      changed = true;
+      logger.dim('Patched overrideBrowserWindowOptions for child windows (main.js)');
+    }
+
+    const setupWinNeedle = '_setupWindowEvent(e,t){if(f(e),e){';
+    const setupWinReplacement = '_setupWindowEvent(e,t){if(f(e),e){try{e.removeMenu&&e.removeMenu();e.setMenuBarVisibility&&e.setMenuBarVisibility(!1);e.autoHideMenuBar=!0}catch(_){};e.on("maximize",(()=>{try{e.webContents.send("zalo-window-maximized",!0)}catch(_){}}));e.on("unmaximize",(()=>{try{e.webContents.send("zalo-window-maximized",!1)}catch(_){}}));';
+    if (content.includes(setupWinNeedle) && !content.includes('e.removeMenu&&e.removeMenu()')) {
+      content = content.replace(setupWinNeedle, setupWinReplacement);
+      changed = true;
+      logger.dim('Added maximize/unmaximize and menu suppression to _setupWindowEvent (main.js)');
+    }
+
+    const withChildPreload = useChildPreload(content);
+    if (withChildPreload !== content) {
+      content = withChildPreload;
+      changed = true;
+      logger.dim('Child windows use ' + CHILD_PRELOAD_FILE + ' instead of preload-render.js (main.js)');
+    }
+
     if (changed) {
       fs.writeFileSync(mainJsPath, content, 'utf8');
       logger.success('Patched main.js for Linux window appearance, close button and disabled DevTools startup');
@@ -632,20 +920,44 @@ async function main() {
       changed = true;
     }
 
-    if (!content.includes('zalo-window-close')) {
-      const ipcHandler = `
-try {
-  const { ipcMain: _zIpc, BrowserWindow: _zBW } = require('electron');
-  _zIpc.on('zalo-window-close', (ev) => {
-    try {
-      const win = _zBW.fromWebContents(ev.sender);
-      if (win) win.close();
-    } catch (_) {}
-  });
-} catch (_) {}
-`;
-      content += '\n' + ipcHandler;
+    const withoutOldIpc = content.replace(MAIN_IPC_BLOCK_RE, '').trimEnd();
+    const withIpc = withoutOldIpc + '\n' + MAIN_IPC_BLOCK;
+    if (withIpc !== content) {
+      content = withIpc;
       changed = true;
+      logger.dim('Installed window IPC handlers in compact-app.js');
+    }
+
+    // Patch child window options in compact-app.js
+    const childOptsNeedle = 't&&(this.childOpts=t,this.childOpts.modal=!0,this.childOpts.frame=!0)';
+    const childOptsReplacement = 't&&(this.childOpts=t,this.childOpts.modal=!1,this.childOpts.frame=!1,this.childOpts.transparent=!0,this.childOpts.backgroundColor="#00000000",this.childOpts.hasShadow=!1,this.childOpts.titleBarStyle="hidden",this.childOpts.webPreferences=Object.assign({},(this.mainOpts&&this.mainOpts.webPreferences)||{},{preload:'+CHILD_PRELOAD_EXPR+'}))';
+    if (content.includes(childOptsNeedle)) {
+      content = content.replace(childOptsNeedle, childOptsReplacement);
+      changed = true;
+      logger.dim('Patched childOpts in setUpConfiguration (compact-app.js)');
+    }
+
+    const winOpenNeedle = 'overrideBrowserWindowOptions:r(r(r({frame:!1,show:!1,titleBarStyle:"hidden",resizable:!0,transparent:!0,backgroundColor:"#00000000",hasShadow:!1},e),this.childOpts),this.childWindowSize)}}';
+    const winOpenReplacement = 'overrideBrowserWindowOptions:r(r(r(r({frame:!1,show:!1,titleBarStyle:"hidden",resizable:!0,transparent:!0,backgroundColor:"#00000000",hasShadow:!1},e),this.childOpts),this.childWindowSize),{frame:!1,transparent:!0,backgroundColor:"#00000000",hasShadow:!1,titleBarStyle:"hidden",webPreferences:Object.assign({},(this.mainOpts&&this.mainOpts.webPreferences)||{},{preload:'+CHILD_PRELOAD_EXPR+'})})}}';
+    if (content.includes(winOpenNeedle)) {
+      content = content.replace(winOpenNeedle, winOpenReplacement);
+      changed = true;
+      logger.dim('Patched overrideBrowserWindowOptions for child windows (compact-app.js)');
+    }
+
+    const setupWinNeedle = '_setupWindowEvent(e,t){if(f(e),e){';
+    const setupWinReplacement = '_setupWindowEvent(e,t){if(f(e),e){try{e.removeMenu&&e.removeMenu();e.setMenuBarVisibility&&e.setMenuBarVisibility(!1);e.autoHideMenuBar=!0}catch(_){};e.on("maximize",(()=>{try{e.webContents.send("zalo-window-maximized",!0)}catch(_){}}));e.on("unmaximize",(()=>{try{e.webContents.send("zalo-window-maximized",!1)}catch(_){}}));';
+    if (content.includes(setupWinNeedle) && !content.includes('e.removeMenu&&e.removeMenu()')) {
+      content = content.replace(setupWinNeedle, setupWinReplacement);
+      changed = true;
+      logger.dim('Added maximize/unmaximize and menu suppression to _setupWindowEvent (compact-app.js)');
+    }
+
+    const withChildPreload = useChildPreload(content);
+    if (withChildPreload !== content) {
+      content = withChildPreload;
+      changed = true;
+      logger.dim('Child windows use ' + CHILD_PRELOAD_FILE + ' instead of preload-render.js (compact-app.js)');
     }
 
     if (changed) {
@@ -655,7 +967,7 @@ try {
   }
 
   // 3. Patch index.html & login.html to prevent body background fill
-  const htmlFiles = ['index.html', 'login.html'].map(f => path.join(pcDistDir, f));
+  const htmlFiles = ['index.html', 'login.html', 'child.html'].map(f => path.join(pcDistDir, f));
   for (const htmlPath of htmlFiles) {
     if (fs.existsSync(htmlPath)) {
       let content = fs.readFileSync(htmlPath, 'utf8');
@@ -685,10 +997,10 @@ try {
         '#app,#loading-page{width:100% !important;height:100% !important;box-sizing:border-box !important;background-color:var(--layer-background,#ffffff) !important;}' +
         'html.dark #app,body.dark #app,html.dark #loading-page,body.dark #loading-page{background-color:var(--layer-background,#22262B) !important;}' +
         'html:not(.is-maximized) #app{filter:brightness(1.0001) !important;}' +
-        '#titleBar{height:38px !important;min-height:38px !important;width:100% !important;max-width:100% !important;box-sizing:border-box !important;padding:0 0 0 16px !important;display:flex !important;align-items:center !important;justify-content:space-between !important;-webkit-app-region:drag !important;position:relative !important;z-index:100 !important;}' +
+        '#titleBar{height:38px !important;min-height:38px !important;width:100% !important;max-width:100% !important;box-sizing:border-box !important;padding:0 0 0 16px !important;display:flex !important;align-items:center !important;justify-content:space-between !important;-webkit-app-region:no-drag !important;user-select:none !important;cursor:default !important;position:relative !important;z-index:100 !important;}' +
         'body:has(#main-tab) #titleBar,body:has(#sidebarNav) #titleBar{left:64px !important;width:calc(100% - 64px) !important;max-width:calc(100% - 64px) !important;}' +
-        '#titleBar .title-drag{height:38px !important;top:0 !important;left:0 !important;right:60px !important;width:auto !important;-webkit-app-region:drag !important;}' +
-        '#titleBar .title-name{line-height:38px !important;height:38px !important;display:flex !important;align-items:center !important;font-size:13px !important;font-weight:500 !important;-webkit-app-region:drag !important;user-select:none !important;}' +
+        '#titleBar .title-drag{height:38px !important;top:0 !important;left:0 !important;right:60px !important;width:auto !important;-webkit-app-region:no-drag !important;cursor:default !important;}' +
+        '#titleBar .title-name{line-height:38px !important;height:38px !important;display:flex !important;align-items:center !important;font-size:13px !important;font-weight:500 !important;-webkit-app-region:no-drag !important;user-select:none !important;cursor:default !important;}' +
         '#container{height:calc(100% - 38px) !important;max-height:calc(100% - 38px) !important;}' +
         '#sidebarNav{height:100% !important;}' +
         '#container:not(.WEB){margin-top:-38px !important;padding-top:38px !important;}' +
@@ -702,6 +1014,18 @@ try {
         '.zalo-linux-close-button:hover{background-color:#e81123 !important;color:#ffffff !important;}' +
         '.zalo-linux-close-button:active{background-color:#c40e1d !important;color:#ffffff !important;}' +
         'html.is-maximized .zalo-linux-close-button,body.is-maximized .zalo-linux-close-button{border-top-right-radius:0px !important;}' +
+        'body.child-window #titleBar,body:not(:has(#main-tab)):not(:has(#sidebarNav)) #titleBar,.child-mode #titleBar,#titleBar:has(.child-mode){display:none !important;}' +
+        'body.child-window #container,body:not(:has(#main-tab)):not(:has(#sidebarNav)) #container{margin-top:0px !important;padding-top:0px !important;height:100% !important;max-height:100% !important;}' +
+        'body.child-window header#header,body:not(:has(#main-tab)):not(:has(#sidebarNav)) header#header{height:54px !important;min-height:54px !important;padding-right:48px !important;-webkit-app-region:no-drag !important;border-top-left-radius:12px !important;border-top-right-radius:12px !important;user-select:none !important;cursor:default !important;}' +
+        'body.child-window header#header *,body:not(:has(#main-tab)):not(:has(#sidebarNav)) header#header *{-webkit-app-region:no-drag !important;}' +
+        'body.child-window header#header .threadChat,body:not(:has(#main-tab)):not(:has(#sidebarNav)) header#header .threadChat{-webkit-app-region:no-drag !important;user-select:none !important;cursor:default !important;}' +
+        'body.child-window #headerBtns,body:not(:has(#main-tab)):not(:has(#sidebarNav)) #headerBtns{margin-left:auto !important;display:flex !important;align-items:center !important;-webkit-app-region:no-drag !important;}' +
+        '#zalo-linux-child-close-btn{position:fixed !important;top:0 !important;right:0 !important;width:48px !important;height:54px !important;min-height:54px !important;z-index:99999 !important;-webkit-app-region:no-drag !important;pointer-events:auto !important;cursor:pointer !important;display:flex !important;align-items:center !important;justify-content:center !important;background:transparent !important;border:none !important;outline:none !important;padding:0 !important;margin:0 !important;color:var(--text-secondary,#999999) !important;border-top-right-radius:12px !important;transition:background-color 0.15s ease,color 0.15s ease !important;}' +
+        '#zalo-linux-child-close-btn svg{width:12px !important;height:12px !important;display:block !important;pointer-events:none !important;}' +
+        '#zalo-linux-child-close-btn:hover{background-color:#e81123 !important;color:#ffffff !important;}' +
+        '#zalo-linux-child-close-btn:active{background-color:#c40e1d !important;color:#ffffff !important;}' +
+        'html.is-maximized #zalo-linux-child-close-btn,body.is-maximized #zalo-linux-child-close-btn{border-top-right-radius:0px !important;}' +
+        'html.is-maximized body.child-window header#header,html.is-maximized body:not(:has(#main-tab)):not(:has(#sidebarNav)) header#header{border-top-left-radius:0px !important;border-top-right-radius:0px !important;}' +
         '</style>';
 
       if (content.includes('<style id="zalo-transparent-base">')) {
@@ -741,6 +1065,12 @@ try {
     }
   }
 
+  // 5. Standalone child-window preload: the window chrome only, no Zalo bootstrap
+  if (fs.existsSync(mainDistDir)) {
+    fs.writeFileSync(path.join(mainDistDir, CHILD_PRELOAD_FILE), '"use strict";\n' + ROUNDED_PRELOAD_INJECTION, 'utf8');
+    logger.dim(`Wrote ${CHILD_PRELOAD_FILE}`);
+  }
+
   logger.success('Linux window appearance patch applied successfully');
 }
 
@@ -748,4 +1078,4 @@ if (require.main === module) {
   main();
 }
 
-module.exports = { main };
+module.exports = { main, useChildPreload, CHILD_PRELOAD_EXPR };

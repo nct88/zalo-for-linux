@@ -217,6 +217,9 @@ async function extractAppAsar() {
   const { main: patchWindowAppearance } = require('./patches/patch-window-appearance');
   await patchWindowAppearance();
 
+  const { main: patchMultiWindow } = require('./patches/patch-multi-window');
+  await patchMultiWindow();
+
   const { main: patchZcallWineTuning } = require('./patches/patch-zcall-wine-tuning');
   await patchZcallWineTuning();
 }
