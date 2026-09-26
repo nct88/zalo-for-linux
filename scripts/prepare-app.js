@@ -151,8 +151,17 @@ async function extractAppAsar() {
   // Apply patches
   logger.info('Applying platform patches...');
 
-  const { main: patchTitlebar } = require('./patches/patch-titlebar');
-  await patchTitlebar();
+  // Local UI: frameless rounded window with its own title bar instead of
+  // patch-titlebar (keep the app's look, all flows stay as upstream).
+  const { main: patchRemoveMenu } = require('./patches/patch-remove-menu');
+  await patchRemoveMenu();
+
+  const { main: patchWindowAppearance } = require('./patches/patch-window-appearance');
+  await patchWindowAppearance();
+
+  // Local: "Mở cửa sổ riêng" (open a chat in its own window) for every account.
+  const { main: patchMultiWindow } = require('./patches/patch-multi-window');
+  await patchMultiWindow();
 
   const { main: patchPastingImg } = require('./patches/patch-pasting-img');
   await patchPastingImg();
