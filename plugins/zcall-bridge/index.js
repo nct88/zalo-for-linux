@@ -794,6 +794,8 @@ function activateWine(wine, prefix) {
   process.env.ZCALL_WINE = wine;
   process.env.ZCALL_WINEPREFIX = prefix;
   if (!process.env.WINEDEBUG) process.env.WINEDEBUG = '-all';
+  // No menu/icon churn from winemenubuilder, no Mono/Gecko install prompts.
+  if (!process.env.WINEDLLOVERRIDES) process.env.WINEDLLOVERRIDES = 'winemenubuilder.exe=d;mscoree=d;mshtml=d';
   if (wineActivated) return;
   wineActivated = true;
 

@@ -193,6 +193,11 @@ async function extractAppAsar() {
   const { main: patchZcallCallv2 } = require('./patches/patch-zcall-callv2');
   await patchZcallCallv2();
 
+  // zcall-raise window helper (call window on top on GNOME), loopback-only
+  // helper ports, stale helper sweep.
+  const { main: patchZcallWineTuning } = require('./patches/patch-zcall-wine-tuning');
+  await patchZcallWineTuning();
+
   // const { main: patchFixImageResizeLinux } = require('./patches/patch-fix-image-resize-linux');
   // await patchFixImageResizeLinux();
 

@@ -52,7 +52,8 @@ const REPLACEMENTS = [
   {
     from: ';A=i(e,[v,g]),A.stdout.setEncoding("utf8")',
     to: ';"linux"===process.platform?(i(process.env.ZCALL_WINE||"wine",[o.join(__dirname,"..","native","qt-call-and-cap","pipebridge.exe"),"29631","29632"]),A=i(process.env.ZCALL_WINE||"wine",[e,"\\\\\\\\.\\\\pipe\\\\PipeZCallRecv","\\\\\\\\.\\\\pipe\\\\PipeZCallSend"])):A=i(e,[v,g]),A.stdout.setEncoding("utf8")',
-    already: ';"linux"===process.platform?(BB||(BB=!0,TK=',
+    // not anchored: patch-zcall-wine-tuning inserts a sweep before BB
+    already: 'BB||(BB=!0,TK=',
   },
   // 4. listen: TCP on Linux, unix socket elsewhere
   {
